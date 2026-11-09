@@ -1,0 +1,163 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1">
+<title>SonicSeal · 声波加密机</title>
+<meta name="theme-color" content="#04101a">
+<meta name="description" content="把一句英文加密成一段声音，只有拿着同一把密钥的人才能听出内容。">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="SonicSeal">
+<meta name="format-detection" content="telephone=no">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="assets/icon-180.png">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23081220'/%3E%3Cg fill='none' stroke='%2346e0d0' stroke-width='2' stroke-linecap='round'%3E%3Cpath d='M11 12a7 7 0 0 1 0 8'/%3E%3Cpath d='M15 9a11 11 0 0 1 0 14'/%3E%3C/g%3E%3Ccircle cx='8' cy='16' r='2' fill='%2346e0d0'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="assets/styles.css">
+</head>
+<body>
+<div class="grain"></div>
+
+<header class="top">
+  <div class="brand">
+    <canvas class="mark" id="mark" width="88" height="88" aria-hidden="true"></canvas>
+    <div class="brandText">
+      <h1>SonicSeal</h1>
+      <p class="tag">把一句话，变成一段只有对方能听懂的声音</p>
+    </div>
+  </div>
+  <div class="status" id="status">
+    <span class="dot" id="dot"></span><span id="statusText">声学引擎准备中…</span>
+  </div>
+</header>
+
+<nav class="tabs" id="tabs" role="tablist" aria-label="模式">
+  <button class="tab on" type="button" data-tab="send" role="tab" aria-selected="true">
+    <span class="tabNum">01</span> 发送
+    <small>文本 → 声音</small>
+  </button>
+  <button class="tab" type="button" data-tab="recv" role="tab" aria-selected="false">
+    <span class="tabNum">02</span> 接收
+    <small>声音 → 文本</small>
+    <em class="badge" id="rxBadge" hidden>0</em>
+  </button>
+</nav>
+
+<main class="grid" id="panels">
+
+  <!-- ================= 发送 ================= -->
+  <section class="card panel on" id="panelSend" data-panel="send" role="tabpanel">
+    <div class="cardHead">
+      <h2><span class="num">01</span> 发送</h2>
+      <span class="hint">文本 → 加密帧 → 声音</span>
+    </div>
+
+    <label class="field">
+      <span class="fieldLabel">要发送的英文内容</span>
+      <textarea id="plain" rows="3" spellcheck="false" autocapitalize="sentences" enterkeyhint="done"
+        placeholder="Type the English message you want to hide in sound…">Meet me by the old lighthouse at nine.</textarea>
+      <span class="counter"><span id="byteCount">0</span> 字节 · 上限 <span id="byteCap">—</span></span>
+    </label>
+
+    <div class="row2">
+      <label class="field grow">
+        <span class="fieldLabel">共享密钥 <em>可选</em></span>
+        <div class="inputWrap">
+          <input id="pass" type="password" autocomplete="new-password" autocorrect="off" autocapitalize="off" spellcheck="false" enterkeyhint="done" placeholder="留空则明文发送">
+          <button type="button" class="eye" id="eye" title="显示密钥" aria-label="显示密钥">◍</button>
+        </div>
+      </label>
+      <label class="field speedField">
+        <span class="fieldLabel">速度</span>
+        <select id="speed">
+          <option value="normal">标准 · 最稳</option>
+          <option value="fast" selected>快速 · 平衡</option>
+          <option value="fastest">极速 · 挑环境</option>
+        </select>
+      </label>
+    </div>
+
+    <div class="metaLine" id="sendMeta">—</div>
+
+    <canvas id="wave" class="wave" height="150" aria-hidden="true"></canvas>
+    <div class="frameStrip" id="frameStrip" aria-live="polite"></div>
+
+    <div class="dock" id="sendDock">
+      <button class="primary" id="playBtn" disabled>生成并播放</button>
+      <button class="ghost iconBtn" id="wavBtn" disabled title="导出一段可以发给对方的 WAV">WAV</button>
+      <button class="ghost iconBtn" id="copyWireBtn" disabled title="复制报文（纯数据，不含声音）">报文</button>
+    </div>
+  </section>
+
+  <!-- ================= 接收 ================= -->
+  <section class="card panel" id="panelRecv" data-panel="recv" role="tabpanel">
+    <div class="cardHead">
+      <h2><span class="num">02</span> 接收</h2>
+      <span class="hint">麦克风 → 帧 → 解密</span>
+    </div>
+
+    <div class="sonar">
+      <canvas id="scope" width="720" height="420" aria-hidden="true"></canvas>
+      <button class="micBtn" id="micBtn" title="开始收听">
+        <svg viewBox="0 0 24 24" width="30" height="30" aria-hidden="true">
+          <path d="M12 3a3 3 0 0 1 3 3v6a3 3 0 0 1-6 0V6a3 3 0 0 1 3-3z" fill="currentColor"/>
+          <path d="M5 11a7 7 0 0 0 14 0M12 18v3" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+        </svg>
+        <span id="micLabel">开始收听</span>
+      </button>
+      <div class="level"><i id="levelBar"></i></div>
+      <span class="sonarTag" id="sonarTag">待机 · 麦克风未开启</span>
+    </div>
+
+    <label class="field">
+      <span class="fieldLabel">共享密钥 <em>与发送方一致</em></span>
+      <div class="inputWrap">
+        <input id="passRx" type="password" autocomplete="new-password" autocorrect="off" autocapitalize="off" spellcheck="false" enterkeyhint="done" placeholder="接收加密语音时填写">
+        <button type="button" class="eye" id="eyeRx" title="显示密钥" aria-label="显示密钥">◍</button>
+      </div>
+    </label>
+
+    <label class="filePick" id="filePick">
+      <input id="file" type="file" accept="audio/*">
+      <span class="fileIcon" aria-hidden="true">▤</span>
+      <span class="fileText"><b>从录音文件解码</b><small>选一段 WAV / M4A，或拖进来</small></span>
+    </label>
+
+    <div class="chips" id="chips" aria-live="polite"></div>
+
+    <div class="logWrap">
+      <div class="logHead">
+        <span>解出的消息</span>
+        <button class="link" id="clearLog" type="button">清空</button>
+      </div>
+      <ol class="log" id="log">
+        <li class="empty">还没有解出任何消息。打开麦克风，或载入一段录音。</li>
+      </ol>
+    </div>
+  </section>
+</main>
+
+<details class="foot">
+  <summary>它是怎么工作的 · 怎么用 · 注意什么</summary>
+  <div class="footGrid">
+    <div class="footCol">
+      <h3>它怎么工作</h3>
+      <p>文本先做 deflate 压缩，再用 <b>AES-256-GCM</b> 加密（密钥由你给的密码经 <b>PBKDF2-SHA256 / 60 万轮</b> 派生，每条消息带独立 8 字节随机盐）。密文按 76 字节切块，加上 18 字节帧头，用 <b>7 位信道编码</b> 变成纯 ASCII 报文，最后由 <b>ggwave</b> 调制成 FSK 音频（Reed–Solomon 纠错）。</p>
+    </div>
+    <div class="footCol">
+      <h3>怎么用</h3>
+      <p>两台设备约定同一个密钥。发送方点“生成并播放”，把音量开大；接收方在同一房间点“开始收听”。距离 1–3 米、环境安静时最稳。也可以先导出 WAV 再发给对方播放，或用“从录音文件解码”直接读文件。</p>
+    </div>
+    <div class="footCol warn">
+      <h3>注意</h3>
+      <p>麦克风需要 <b>HTTPS 或 localhost</b>，局域网 IP 直连（http://）浏览器不允许录音。密钥只在本地参与运算，不会外传；忘了密钥，这段声音就永远解不开了。</p>
+    </div>
+  </div>
+</details>
+
+<script src="vendor/ggwave.js"></script>
+<script src="assets/envelope.js"></script>
+<script src="assets/app.js"></script>
+</body>
+</html>
